@@ -9,10 +9,11 @@ public class FileClient implements Runnable {
   private static BufferedReader inputLine = null;
   private static boolean closed = false;
   private static final int PORT = 1337;
-  private static final String root = "D:/NPLReceived/";
+  private static final String root = System.getProperty("user.dir");
   private static String lastRequest;
 
   public static void main(String[] args) {
+    //System.out.println(root);
     try {
       InetAddress cordAddress = InetAddress.getLocalHost(); //server's address
       socket = new Socket(cordAddress, PORT);
@@ -46,7 +47,7 @@ public class FileClient implements Runnable {
       int bytesRead, current = 0;
       byte[] buffer = new byte[size.intValue()];
       DataInputStream ips = new DataInputStream(socket.getInputStream());
-      BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(root + fName));
+      BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(root +"\\"+ fName));
       while(size > 0 && (bytesRead = ips.read(buffer, 0, buffer.length)) != -1) {
         bos.write(buffer, 0, bytesRead);
         size -= bytesRead;

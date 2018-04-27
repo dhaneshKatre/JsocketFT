@@ -44,8 +44,8 @@ class ClientThread extends Thread {
   Socket clientSocket = null;
   BufferedInputStream bis = null;
   OutputStream os = null;
-  final File root = new File("D:/NPLFolder");
-
+  final File root = new File(System.getProperty("user.dir"));
+  
   public void writeToClient(String msg) {
     ps.println(msg);
   }
@@ -100,6 +100,7 @@ class ClientThread extends Thread {
   }
 
   public void run() {
+	System.out.println(root);
     writeToClient("***Welcome to the Cloud***");
     while(true) {
       try {
