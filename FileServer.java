@@ -8,6 +8,7 @@ import java.util.*;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 public class FileServer {
@@ -55,6 +56,7 @@ class ClientThread extends Thread {
   final File root = new File(System.getProperty("user.dir"));
   RSA rsa = null;
   AES aes = null;
+
   public void writeToClient(String msg) {
     ps.println(msg);
   }
@@ -100,7 +102,7 @@ class ClientThread extends Thread {
       bis = new BufferedInputStream(new FileInputStream(fileToSend));
       bis.read(sendArray, 0, sendArray.length);
 
-      //*************AES*************//
+      // *************AES*************//
       byte[] encryptedFile = aes.encrypt(sendArray);
       byte[] aesIv = aes.getIV();
       ByteBuffer byteBuffer = ByteBuffer.allocate(4 + aesIv.length + encryptedFile.length);
@@ -110,11 +112,11 @@ class ClientThread extends Thread {
       byte[] bufferToSend = byteBuffer.array();
       writeToClient(bufferToSend.length + " bytes AES encrypted file incoming...");
 
-      //********Sending fie as byte array********//
-      os = clientSocket.getOutputStream();
-      os.write(bufferToSend, 0, bufferToSend.length);
-      os.flush();
-      return true;      
+      // ********Sending fie as byte array********//
+      DataOutputStream dOut = new DataOutputStream(clientSocket.getOutputStream());
+      dOut.writeInt(bufferToSend.length);
+      dOut.write(bufferToSend);
+      return true;
     } catch (Exception e) {
       e.printStackTrace();
       return false;
@@ -129,13 +131,18 @@ class ClientThread extends Thread {
     writeToClient(rsa.getPhi().toString());
     writeToClient(rsa.getPublicKey().toString());
     byte[] secretKey = aes.getKey();
+    try {
+      DataOutputStream dOut = new DataOutputStream(clientSocket.getOutputStream());
+      dOut.writeInt(secretKey.length);
+      dOut.write(secretKey);
+    } catch (Exception r) {
+      r.printStackTrace();
+    }
     BigInteger publicKey = rsa.getPublicKey();
     BigInteger[] data = new BigInteger[secretKey.length];
     for (int i = 0; i < secretKey.length; i++) {
-        data[i] = rsa.encode(publicKey, (int) secretKey[i]);
-        writeToClient(data[i].toString());
+      data[i] = rsa.encode(publicKey, (int) secretKey[i]); // rsa
     }
-    writeToClient("Parameter Initialization Completed!");
     while (true) {
       try {
         String request = is.readLine().trim();
@@ -175,13 +182,13 @@ class AES {
   private SecretKey secretKey;
   private GCMParameterSpec parameterSpec;
   private SecureRandom secureRandom = new SecureRandom();
+
   public AES() {
     this.key = new byte[16];
-    this.iv = new byte[12];
+    this.iv = new byte[16];
     secureRandom.nextBytes(key);
     secretKey = new SecretKeySpec(key, "AES");
     secureRandom.nextBytes(iv);
-    parameterSpec = new GCMParameterSpec(128, this.iv);
   }
 
   public byte[] getIV() {
@@ -194,12 +201,12 @@ class AES {
 
   public byte[] encrypt(byte[] pt) {
     try {
-      final Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-      cipher.init(Cipher.ENCRYPT_MODE, this.secretKey, this.parameterSpec);
+      final Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5PADDING");
+      cipher.init(Cipher.ENCRYPT_MODE, this.secretKey);
       byte[] ctb = cipher.doFinal(pt);
       ctb = Base64.getEncoder().encode(ctb);
       return ctb;
-    } catch(Exception e) {
+    } catch (Exception e) {
       e.printStackTrace();
       return null;
     }
@@ -208,7 +215,7 @@ class AES {
 }
 
 class RSA {
-  private BigInteger publicKey, privateKey;
+  private BigInteger publicKey;
   private BigInteger p, q, n, phi;
   private final Random rnd = new Random();
   private static final int bitLength = 10;
@@ -219,7 +226,6 @@ class RSA {
     n = p.multiply(q);
     phi = p.subtract(BigInteger.ONE).multiply(q.subtract(BigInteger.ONE));
     generatePublic();
-    // generatePrivate(this.publicKey);
   }
 
   private void generatePublic() {
@@ -241,14 +247,6 @@ class RSA {
     return this.n;
   }
 
-  private void generatePrivate(BigInteger publicKey) {
-    this.privateKey = publicKey.modInverse(phi);
-  }
-
-  public BigInteger getPrivateKey() {
-    return this.privateKey;
-  }
-
   public BigInteger encode(BigInteger publicKey, int pt) {
     try {
       BigInteger m = BigInteger.valueOf(pt);
@@ -256,15 +254,6 @@ class RSA {
     } catch (ArithmeticException e) {
       e.printStackTrace();
       return null;
-    }
-  }
-
-  public int decode(BigInteger privateKey, BigInteger ct) {
-    try {
-      return (ct.pow(privateKey.intValue()).mod(n)).intValue();
-    } catch (ArithmeticException e) {
-      e.printStackTrace();
-      return -99;
     }
   }
 }
