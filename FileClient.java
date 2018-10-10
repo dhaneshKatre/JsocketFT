@@ -18,7 +18,7 @@ public class FileClient implements Runnable {
   private static final int PORT = 1337;
   private static final String root = System.getProperty("user.dir");
   private static String lastRequest;
-  private static byte[] key = new byte[16];
+  private static byte[] key;
   private static RSA rsa;
 
   public static void main(String[] args) {
@@ -51,24 +51,7 @@ public class FileClient implements Runnable {
     }
   }
 
-  public void getKey() {
-    try {
-      System.out.println("Getting Key..");
-      BigInteger privateKey = rsa.getPrivateKey();
-      BigInteger[] data = new BigInteger[16];
-      for (int i = 0; i < data.length; i++)
-        data[i] = new BigInteger(is.readLine());
-      System.out.println("Decoding Key!");
-      for (int i = 0; i < data.length; i++)
-        key[i] = (byte) rsa.decode(privateKey, data[i]);
-      System.out.println("Getting Key - Done!");
-    } catch (Exception r) {
-      r.printStackTrace();
-    }
-  }
-
   public void getAesFile(String fName, Long size) {
-
     try {
       DataInputStream dIn = new DataInputStream(socket.getInputStream());
       int length = dIn.readInt();
@@ -92,45 +75,41 @@ public class FileClient implements Runnable {
     }
   }
 
-  public void getEncryptedFile(String fName, Long size) {
-    try {
-      BigInteger[] data = new BigInteger[size.intValue()];
-      byte[] buffer = new byte[size.intValue()];
-      for (int i = 0; i < data.length; i++)
-        data[i] = new BigInteger(is.readLine());
-      System.out.println("File " + fName + " downloaded successfully!");
-      System.out.println("Decrypting...");
-      BigInteger privateKey = rsa.getPrivateKey();
-      for (int i = 0; i < data.length; i++)
-        buffer[i] = (byte) rsa.decode(privateKey, data[i]);
-      BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(root + "\\" + fName));
-      bos.write(buffer);
-      System.out.println("Decryption Successful!");
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
-  }
+  // public void getEncryptedFile(String fName, Long size) {
+  // try {
+  // BigInteger[] data = new BigInteger[size.intValue()];
+  // byte[] buffer = new byte[size.intValue()];
+  // for (int i = 0; i < data.length; i++)
+  // data[i] = new BigInteger(is.readLine());
+  // System.out.println("File " + fName + " downloaded successfully!");
+  // System.out.println("Decrypting...");
+  // BigInteger privateKey = rsa.getPrivateKey();
+  // for (int i = 0; i < data.length; i++)
+  // buffer[i] = (byte) rsa.decode(privateKey, data[i]);
+  // BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(root
+  // + "\\" + fName));
+  // bos.write(buffer);
+  // System.out.println("Decryption Successful!");
+  // } catch (Exception e) {
+  // e.printStackTrace();
+  // }
+  // }
 
+  @SuppressWarnings("deprecation")
   public void run() {
     String response;
     try {
       System.out.println(is.readLine());
       System.out.println(is.readLine());
-      BigInteger n = new BigInteger(is.readLine());
-      BigInteger phi = new BigInteger(is.readLine());
-      BigInteger publicKey = new BigInteger(is.readLine());
-      rsa.setN(n);
-      rsa.setPhi(phi);
-      rsa.setPublicKey(publicKey);
-      rsa.generatePrivate(publicKey);
+      rsa.setN(new BigInteger(is.readLine()));
+      rsa.setD(new BigInteger(is.readLine()), new BigInteger(is.readLine()));
       try {
-        // getKey();
         DataInputStream dIn = new DataInputStream(socket.getInputStream());
         int length = dIn.readInt();
         if (length > 0) {
           byte[] m = new byte[length];
           dIn.readFully(m, 0, m.length);
-          key = m;
+          key = rsa.decrypt(m);
         }
       } catch (Exception e) {
         e.printStackTrace();
@@ -170,34 +149,18 @@ class AES {
 }
 
 class RSA {
-  private BigInteger publicKey, phi, privateKey, n;
-
-  public void generatePrivate(BigInteger publicKey) {
-    this.privateKey = publicKey.modInverse(phi);
-  }
-
-  public BigInteger getPrivateKey() {
-    return this.privateKey;
-  }
-
-  public void setPhi(BigInteger phi) {
-    this.phi = phi;
-  }
-
-  public void setPublicKey(BigInteger publicKey) {
-    this.publicKey = publicKey;
-  }
+  private BigInteger N;
+  private BigInteger d;
 
   public void setN(BigInteger n) {
-    this.n = n;
+    this.N = n;
   }
 
-  public int decode(BigInteger privateKey, BigInteger ct) {
-    try {
-      return (ct.pow(privateKey.intValue()).mod(n)).intValue();
-    } catch (ArithmeticException e) {
-      e.printStackTrace();
-      return -99;
-    }
+  public void setD(BigInteger e, BigInteger phi) {
+    this.d = e.modInverse(phi);
+  }
+
+  public byte[] decrypt(byte[] message) {
+    return (new BigInteger(message)).modPow(d, N).toByteArray();
   }
 }

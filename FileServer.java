@@ -4,11 +4,7 @@ import java.net.*;
 import java.nio.*;
 import java.security.SecureRandom;
 import java.util.*;
-
 import javax.crypto.Cipher;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 public class FileServer {
@@ -123,25 +119,22 @@ class ClientThread extends Thread {
     }
   }
 
+  @SuppressWarnings("deprecation")
   public void run() {
     System.out.println(root);
     writeToClient("***Welcome to the Cloud***");
-    writeToClient("Initializing Transfer Parameters..");
+    writeToClient("Initializing Transfer Parameters...");
     writeToClient(rsa.getN().toString());
+    writeToClient(rsa.getE().toString());
     writeToClient(rsa.getPhi().toString());
-    writeToClient(rsa.getPublicKey().toString());
     byte[] secretKey = aes.getKey();
+    byte[] finalCipherText = rsa.encrypt(secretKey);
     try {
       DataOutputStream dOut = new DataOutputStream(clientSocket.getOutputStream());
-      dOut.writeInt(secretKey.length);
-      dOut.write(secretKey);
+      dOut.writeInt(finalCipherText.length);
+      dOut.write(finalCipherText);
     } catch (Exception r) {
       r.printStackTrace();
-    }
-    BigInteger publicKey = rsa.getPublicKey();
-    BigInteger[] data = new BigInteger[secretKey.length];
-    for (int i = 0; i < secretKey.length; i++) {
-      data[i] = rsa.encode(publicKey, (int) secretKey[i]); // rsa
     }
     while (true) {
       try {
@@ -180,13 +173,23 @@ class ClientThread extends Thread {
 class AES {
   private byte[] key, iv;
   private SecretKey secretKey;
-  private GCMParameterSpec parameterSpec;
   private SecureRandom secureRandom = new SecureRandom();
 
+  public String getSaltString() {
+    String SALTCHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
+    StringBuilder salt = new StringBuilder();
+    Random rnd = new Random();
+    while (salt.length() < 16) {
+      int index = (int) (rnd.nextFloat() * SALTCHARS.length());
+      salt.append(SALTCHARS.charAt(index));
+    }
+    String saltStr = salt.toString();
+    return saltStr;
+  }
+
   public AES() {
-    this.key = new byte[16];
+    this.key = getSaltString().getBytes();
     this.iv = new byte[16];
-    secureRandom.nextBytes(key);
     secretKey = new SecretKeySpec(key, "AES");
     secureRandom.nextBytes(iv);
   }
@@ -215,45 +218,38 @@ class AES {
 }
 
 class RSA {
-  private BigInteger publicKey;
-  private BigInteger p, q, n, phi;
-  private final Random rnd = new Random();
-  private static final int bitLength = 10;
+  private BigInteger p;
+  private BigInteger q;
+  private BigInteger N;
+  private BigInteger phi;
+  private BigInteger e;
+  private int bitlength = 1024;
+  private Random r;
 
   public RSA() {
-    p = BigInteger.probablePrime(bitLength, rnd);
-    q = BigInteger.probablePrime(bitLength, rnd);
-    n = p.multiply(q);
+    r = new Random();
+    p = BigInteger.probablePrime(bitlength, r);
+    q = BigInteger.probablePrime(bitlength, r);
+    N = p.multiply(q);
     phi = p.subtract(BigInteger.ONE).multiply(q.subtract(BigInteger.ONE));
-    generatePublic();
-  }
-
-  private void generatePublic() {
-    BigInteger e = BigInteger.probablePrime(bitLength / 2, rnd);
+    e = BigInteger.probablePrime(bitlength / 2, r);
     while (phi.gcd(e).compareTo(BigInteger.ONE) > 0 && e.compareTo(phi) < 0)
       e.add(BigInteger.ONE);
-    this.publicKey = e;
-  }
-
-  public BigInteger getPublicKey() {
-    return this.publicKey;
   }
 
   public BigInteger getPhi() {
-    return this.phi;
+    return phi;
   }
 
   public BigInteger getN() {
-    return this.n;
+    return N;
   }
 
-  public BigInteger encode(BigInteger publicKey, int pt) {
-    try {
-      BigInteger m = BigInteger.valueOf(pt);
-      return m.pow(publicKey.intValue()).mod(n);
-    } catch (ArithmeticException e) {
-      e.printStackTrace();
-      return null;
-    }
+  public BigInteger getE() {
+    return e;
+  }
+
+  public byte[] encrypt(byte[] message) {
+    return (new BigInteger(message)).modPow(e, N).toByteArray();
   }
 }
