@@ -23,6 +23,7 @@ public class FileClient implements Runnable {
 
   public static void main(String[] args) {
     try {
+      rsa = new RSA();
       InetAddress cordAddress = InetAddress.getLocalHost(); // server's address
       socket = new Socket(cordAddress, PORT);
       inputLine = new BufferedReader(new InputStreamReader(System.in));
